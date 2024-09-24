@@ -1,0 +1,21 @@
+[tool.poetry]
+name = "logus"
+version = "0.1.0"
+description = ""
+authors = ["Dipankar Sarkar <me@dipankar.name>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+fastapi = "^0.115.0"
+uvicorn = "^0.30.6"
+anthropic = "^0.34.2"
+openai = "^1.47.1"
+groq = "^0.11.0"
+pydantic = "^2.9.2"
+python-dotenv = "^1.0.1"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
