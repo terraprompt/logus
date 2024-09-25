@@ -7,9 +7,14 @@ import openai
 import groq
 from enum import Enum
 from dotenv import load_dotenv
+from fastapi.staticfiles import StaticFiles
+
+
 load_dotenv()
 
 app = FastAPI()
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Load API keys from environment variables
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
@@ -97,6 +102,18 @@ Prompt: {prompt}
 Provide a concise statement of the inferred goal in one sentence.
 """
     return get_llm_response(model, inference_prompt)
+
+class GoalInferenceRequest(BaseModel):
+    prompt: str
+    model: LLMModel
+
+@app.post("/api/infer-goal", response_model=str)
+async def infer_goal_endpoint(request: GoalInferenceRequest):
+    try:
+        return infer_goal(request.prompt, request.model)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/api/analyze-prompt", response_model=PromptAnalysisResponse)
 async def analyze_prompt(request: PromptAnalysisRequest):

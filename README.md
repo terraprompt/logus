@@ -70,7 +70,7 @@ The application uses a modular architecture, allowing for easy extension and cus
 
 1. Start the backend server:
    ```
-   cd backend
+   cd logus
    uvicorn main:app --reload
    ```
 
