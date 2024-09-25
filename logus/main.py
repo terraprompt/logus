@@ -1,7 +1,7 @@
 import os
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Dict
 import anthropic
 import openai
 import groq
@@ -9,6 +9,7 @@ from enum import Enum
 from dotenv import load_dotenv
 from fastapi.staticfiles import StaticFiles
 import json
+import re
 
 load_dotenv()
 
@@ -31,7 +32,7 @@ class LLMModel(str, Enum):
     GPT_3_5_TURBO = "gpt-3.5-turbo"
     GROQ_LLM = "mixtral-8x7b-32768"
 
-class PromptAnalysisRequest(BaseModel):
+class FragmentAnalysisRequest(BaseModel):
     prompt: str
     model: LLMModel
     goal: Optional[str] = None
@@ -46,9 +47,12 @@ class Log(BaseModel):
     type: str
     message: str
 
+class PromptAnalysisRequest(BaseModel):
+    prompt: str
+    model: LLMModel
+    goal: Optional[str] = None
+
 class PromptAnalysisResponse(BaseModel):
-    fragments: List[Fragment]
-    logs: List[Log]
     overall_goal_alignment: int
     suggested_improvements: List[str]
     estimated_effectiveness: int
@@ -61,7 +65,7 @@ class TestGenerationRequest(BaseModel):
     goal: Optional[str] = None
 
 class Test(BaseModel):
-    input: str
+    input: Dict[str, str]
     expected_output: str
     goal_relevance: int
 
@@ -118,6 +122,75 @@ async def infer_goal_endpoint(request: GoalInferenceRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/api/analyze-fragments", response_model=List[Fragment])
+async def analyze_fragments(request: FragmentAnalysisRequest):
+    try:
+        if request.goal is None:
+            request.goal = infer_goal(request.prompt, request.model)
+
+        llm_prompt = f"""Analyze the following prompt for an LLM, keeping in mind the goal:
+
+Prompt: {request.prompt}
+
+Goal: {request.goal}
+
+Divide the prompt into fragments and analyze each fragment. For each fragment, determine:
+1. The type (instruction, context, example, or constraint)
+2. How well it aligns with the goal (1-5, where 5 is perfectly aligned)
+3. A suggestion for improvement to better align with the goal
+
+Provide your analysis in the following JSON format without any other text:
+{{
+  "fragments": [
+    {{
+      "text": "fragment text",
+      "type": "fragment type",
+      "goal_alignment": alignment_score,
+      "improvement_suggestion": "suggestion to better align with goal"
+    }},
+    ...
+  ]
+}}
+"""
+
+        analysis = json.loads(get_llm_response(request.model, llm_prompt))
+        return [Fragment(**fragment) for fragment in analysis["fragments"]]
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/analyze-logs", response_model=List[Log])
+async def analyze_logs(request: PromptAnalysisRequest):
+    try:
+        if request.goal is None:
+            request.goal = infer_goal(request.prompt, request.model)
+
+        llm_prompt = f"""Analyze the following prompt for an LLM, keeping in mind the goal:
+
+Prompt: {request.prompt}
+
+Goal: {request.goal}
+
+Generate a list of logs (info, warnings, or errors) based on the changes being made to the prompt. Focus on aspects that are relevant to achieving the goal.
+
+Provide your analysis in the following JSON format without any other text:
+{{
+  "logs": [
+    {{
+      "type": "info/warning/error",
+      "message": "log message relevant to achieving the goal"
+    }},
+    ...
+  ]
+}}
+"""
+
+        analysis = json.loads(get_llm_response(request.model, llm_prompt))
+        return [Log(**log) for log in analysis["logs"]]
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/api/analyze-prompt", response_model=PromptAnalysisResponse)
 async def analyze_prompt(request: PromptAnalysisRequest):
     try:
@@ -132,34 +205,13 @@ Prompt: {request.prompt}
 
 {'Inferred' if is_goal_inferred else 'Provided'} Goal: {request.goal}
 
-Divide the prompt into fragments and analyze each fragment. For each fragment, determine:
-1. The type (instruction, context, example, or constraint)
-2. How well it aligns with the goal (1-5, where 5 is perfectly aligned)
-3. A suggestion for improvement to better align with the goal
-
-Also, provide an overall analysis including:
+Provide an overall analysis including:
 1. Overall alignment of the prompt with the goal (1-10)
 2. List of suggested improvements to better achieve the goal
 3. Estimated effectiveness of the prompt in achieving the goal (1-10)
 
 Provide your analysis in the following JSON format without any other text:
 {{
-  "fragments": [
-    {{
-      "text": "fragment text",
-      "type": "fragment type",
-      "goal_alignment": alignment_score,
-      "improvement_suggestion": "suggestion to better align with goal"
-    }},
-    ...
-  ],
-  "logs": [
-    {{
-      "type": "info/warning/error",
-      "message": "log message relevant to achieving the goal"
-    }},
-    ...
-  ],
   "overall_goal_alignment": overall_alignment_score,
   "suggested_improvements": ["improvement1", "improvement2", ...],
   "estimated_effectiveness": effectiveness_score,
@@ -169,8 +221,6 @@ Provide your analysis in the following JSON format without any other text:
 """
 
         analysis = PromptAnalysisResponse(**json.loads(get_llm_response(request.model, llm_prompt)))    
-
-        # You might need to add error handling and validation here
         return analysis
 
     except Exception as e:
@@ -182,25 +232,32 @@ async def generate_test(request: TestGenerationRequest):
         if request.goal is None:
             request.goal = infer_goal(request.prompt, request.model)
 
-        llm_prompt = f"""Generate a test case for the following LLM prompt, keeping in mind the {'inferred' if request.goal is None else 'provided'} goal:
+        variables = re.findall(r'\{([^}]+)\}', request.prompt)
+        
+        llm_prompt = f"""Generate a test case for the following LLM prompt, keeping in mind the goal:
 
 Prompt: {request.prompt}
 
-{'Inferred' if request.goal is None else 'Provided'} Goal: {request.goal}
+Goal: {request.goal}
+
+Variables found in the prompt: {', '.join(variables)}
 
 Provide a test case that is relevant to achieving the goal. Use the following JSON format:
 {{
-  "input": "input for the test case",
+  "input": {{
+    "variable1": "value1",
+    "variable2": "value2",
+    ...
+  }},
   "expected_output": "expected output for the test case",
   "goal_relevance": relevance_score
 }}
 
+The input should include values for all variables found in the prompt.
 The goal_relevance score should be from 1-5, where 5 means the test case is highly relevant to achieving the goal.
 """
 
         test = Test(**json.loads(get_llm_response(request.model, llm_prompt)))
-
-        # You might need to add error handling and validation here
         return test
 
     except Exception as e:
