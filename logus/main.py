@@ -8,7 +8,7 @@ import groq
 from enum import Enum
 from dotenv import load_dotenv
 from fastapi.staticfiles import StaticFiles
-
+import json
 
 load_dotenv()
 
@@ -69,19 +69,21 @@ class PromptExecutionRequest(BaseModel):
     prompt: str
     model: LLMModel
 
-def get_llm_response(model: LLMModel, prompt: str, max_tokens: int = 1000):
+def get_llm_response(model: LLMModel, prompt: str, max_tokens: int = 1000, response_format={"type": "json_object"}) -> str:
     if model == LLMModel.CLAUDE_3_OPUS:
         response = anthropic_client.completions.create(
             model=model,
             prompt=prompt,
             max_tokens_to_sample=max_tokens,
+            response_format=response_format,
         )
         return response.completion
     elif model in [LLMModel.GPT_4, LLMModel.GPT_3_5_TURBO]:
-        response = openai.ChatCompletion.create(
+        response = openai.chat.completions.create(
             model=model,
             messages=[{"role": "user", "content": prompt}],
             max_tokens=max_tokens,
+            response_format=response_format,
         )
         return response.choices[0].message.content
     elif model == LLMModel.GROQ_LLM:
@@ -89,6 +91,7 @@ def get_llm_response(model: LLMModel, prompt: str, max_tokens: int = 1000):
             model=model,
             messages=[{"role": "user", "content": prompt}],
             max_tokens=max_tokens,
+            response_format=response_format,
         )
         return response.choices[0].message.content
     else:
@@ -99,9 +102,9 @@ def infer_goal(prompt: str, model: LLMModel) -> str:
 
 Prompt: {prompt}
 
-Provide a concise statement of the inferred goal in one sentence.
+Provide a concise statement of the inferred goal in one sentence as a JSON dictionnary with the key "goal" and the value being the inferred goal.
 """
-    return get_llm_response(model, inference_prompt)
+    return json.loads(get_llm_response(model, inference_prompt))["goal"]
 
 class GoalInferenceRequest(BaseModel):
     prompt: str
@@ -110,7 +113,7 @@ class GoalInferenceRequest(BaseModel):
 @app.post("/api/infer-goal", response_model=str)
 async def infer_goal_endpoint(request: GoalInferenceRequest):
     try:
-        return infer_goal(request.prompt, request.model)
+        return infer_goal(request.prompt, request.model).strip()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -139,7 +142,7 @@ Also, provide an overall analysis including:
 2. List of suggested improvements to better achieve the goal
 3. Estimated effectiveness of the prompt in achieving the goal (1-10)
 
-Provide your analysis in the following JSON format:
+Provide your analysis in the following JSON format without any other text:
 {{
   "fragments": [
     {{
@@ -165,7 +168,7 @@ Provide your analysis in the following JSON format:
 }}
 """
 
-        analysis = get_llm_response(request.model, llm_prompt)
+        analysis = PromptAnalysisResponse(**json.loads(get_llm_response(request.model, llm_prompt)))    
 
         # You might need to add error handling and validation here
         return analysis
@@ -195,7 +198,7 @@ Provide a test case that is relevant to achieving the goal. Use the following JS
 The goal_relevance score should be from 1-5, where 5 means the test case is highly relevant to achieving the goal.
 """
 
-        test = get_llm_response(request.model, llm_prompt)
+        test = Test(**json.loads(get_llm_response(request.model, llm_prompt)))
 
         # You might need to add error handling and validation here
         return test
