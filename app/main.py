@@ -10,12 +10,16 @@ from dotenv import load_dotenv
 from fastapi.staticfiles import StaticFiles
 import json
 import re
+from fastapi.templating import Jinja2Templates
+from fastapi import Request
 
 load_dotenv()
 
 app = FastAPI()
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+templates = Jinja2Templates(directory="templates")
 
 # Load API keys from environment variables
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
@@ -269,6 +273,14 @@ async def execute_prompt(request: PromptExecutionRequest):
         return get_llm_response(request.model, request.prompt)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/")
+async def index(request: Request):
+    return templates.TemplateResponse("index.html", {"request": request})
+
+@app.get("/agent")
+async def agent(request: Request):
+    return templates.TemplateResponse("agent.html", {"request": request})
 
 if __name__ == "__main__":
     import uvicorn

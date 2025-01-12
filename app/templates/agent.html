@@ -1,0 +1,435 @@
+{% extends "base.html" %}
+
+{% block title %}Saint Prompt: Prompt Engineering Tool{% endblock %}
+
+{% block styles %}
+<style>
+    .CodeMirror {
+        height: calc(100vh - 400px);
+        border: 1px solid #ddd;
+    }
+    .cm-alignment-1 { background-color: rgba(255, 0, 0, 0.2); }
+    .cm-alignment-2 { background-color: rgba(255, 165, 0, 0.2); }
+    .cm-alignment-3 { background-color: rgba(255, 255, 0, 0.2); }
+    .cm-alignment-4 { background-color: rgba(144, 238, 144, 0.2); }
+    .cm-alignment-5 { background-color: rgba(0, 255, 0, 0.2); }
+    .cm-fragment-instruction::before { content: "📝"; }
+    .cm-fragment-context::before { content: "🌍"; }
+    .cm-fragment-example::before { content: "💡"; }
+    .cm-fragment-constraint::before { content: "🚫"; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto p-4 flex-grow overflow-hidden flex flex-col w-full">
+    <div class="flex flex-grow overflow-hidden w-full">
+        <!-- Left Panel -->
+        <div class="w-1/4 pr-4 flex flex-col">
+            <!-- Model Select -->
+            <div class="mb-4">
+                <label for="modelSelect" class="block text-sm font-medium text-gray-700">Select Model</label>
+                <select id="modelSelect" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                    <option value="gpt-4o">GPT-4o</option>
+                    <option value="claude-3-opus-20240229">Claude 3 Opus</option>
+                    <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                    <option value="mixtral-8x7b-32768">Mixtral 8x7B</option>
+                </select>
+            </div>
+            
+            <!-- Tabs -->
+            <div class="mb-4">
+                <!-- Tab buttons and content from original file -->
+                {% include "partials/analysis_tabs.html" %}
+            </div>
+            
+            <button id="analyzeBtn" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded w-full mb-4">
+                Analyze Prompt
+            </button>
+        </div>
+
+        <!-- Right Panel -->
+        <div class="w-3/4 pl-4 flex flex-col overflow-hidden">
+            <!-- Goal textarea -->
+            <div class="mb-4">
+                <label for="goal" class="block text-sm font-medium text-gray-700">Goal (optional)</label>
+                <textarea id="goal" rows="3" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"></textarea>
+            </div>
+            
+            <!-- Prompt editor -->
+            <div class="mb-4 flex-grow overflow-hidden relative">
+                <label for="prompt" class="block text-sm font-medium text-gray-700">Prompt</label>
+                <textarea id="prompt"></textarea>
+                <div id="fragmentOverlay" class="absolute hidden bg-white border rounded p-2 shadow-lg z-10">
+                    <p id="fragmentType" class="font-bold"></p>
+                    <p id="fragmentAlignment"></p>
+                    <p id="fragmentSuggestion" class="text-sm italic"></p>
+                </div>
+            </div>
+            
+            <!-- Console -->
+            <div id="console" class="bg-black text-white p-2 rounded h-40 overflow-y-auto">
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const footer = document.getElementById('footer');
+        if (footer) {
+            footer.style.display = 'none';
+        }
+    });
+
+    // All JavaScript from the original file
+    $(document).ready(function() {
+        let editor = CodeMirror.fromTextArea(document.getElementById("prompt"), {
+            lineNumbers: true,
+            mode: "markdown",
+            theme: "default",
+            gutters: ["CodeMirror-linenumbers", "suggestions"]
+        });
+
+        let storedTests = [];
+        let currentFragments = [];
+        let isGoalUserSet = false;
+        let lastAnalyzedPrompt = "";
+        let lastAnalyzedGoal = "";
+        let analysisDebounceTimeout;
+
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
+
+        const debouncedAnalysis = debounce(checkAndAnalyzePrompt, 1000);
+
+        editor.on("change", function(cm, changeObj) {
+            if (changeObj.origin !== 'setValue') {
+                debouncedAnalysis();
+            }
+        });
+
+        $("#goal").on("input", debounce(function() {
+            isGoalUserSet = true;
+            checkAndAnalyzePrompt();
+        }, 1000));
+
+        function checkAndAnalyzePrompt() {
+            let currentPrompt = editor.getValue().trim();
+            let currentGoal = $("#goal").val().trim();
+
+            if (currentPrompt !== lastAnalyzedPrompt || (isGoalUserSet && currentGoal !== lastAnalyzedGoal)) {
+                if (currentPrompt !== "") {
+                    analyzePrompt(currentPrompt, currentGoal);
+                    lastAnalyzedPrompt = currentPrompt;
+                    lastAnalyzedGoal = currentGoal;
+                } else {
+                    clearAnalysis();
+                }
+            }
+        }
+
+        function analyzePrompt(prompt, goal) {
+            let model = $("#modelSelect").val();
+
+            if (!isGoalUserSet || goal === "") {
+                inferGoal(prompt, model);
+            } else {
+                performAnalysis(prompt, model, goal);
+            }
+        }
+
+        function inferGoal(prompt, model) {
+            $.ajax({
+                url: "/api/infer-goal",
+                type: "POST",
+                contentType: "application/json",
+                data: JSON.stringify({
+                    prompt: prompt,
+                    model: model
+                }),
+                success: function(inferred_goal) {
+                    $("#goal").val(inferred_goal);
+                    lastAnalyzedGoal = inferred_goal;
+                    logMessage("info", "Goal inferred: " + inferred_goal);
+                    performAnalysis(prompt, model, inferred_goal);
+                },
+                error: function(xhr, status, error) {
+                    console.error("Error inferring goal:", error);
+                    logMessage("error", "Failed to infer goal: " + error);
+                }
+            });
+        }
+
+        function performAnalysis(prompt, model, goal) {
+            $.ajax({
+                url: "/api/analyze-fragments",
+                type: "POST",
+                contentType: "application/json",
+                data: JSON.stringify({
+                    prompt: prompt,
+                    model: model,
+                    goal: goal
+                }),
+                success: function(fragments) {
+                    currentFragments = fragments;
+                    displayFragmentAnalysis(fragments);
+                    highlightFragments(fragments);
+                    addFragmentTypeIcons(fragments);
+                    addInlineSuggestions(fragments);
+                },
+                error: function(xhr, status, error) {
+                    console.error("Error analyzing fragments:", error);
+                    logMessage("error", "Failed to analyze fragments: " + error);
+                }
+            });
+
+            $.ajax({
+                url: "/api/analyze-logs",
+                type: "POST",
+                contentType: "application/json",
+                data: JSON.stringify({
+                    prompt: prompt,
+                    model: model,
+                    goal: goal
+                }),
+                success: function(logs) {
+                    displayLogs(logs);
+                },
+                error: function(xhr, status, error) {
+                    console.error("Error analyzing logs:", error);
+                    logMessage("error", "Failed to analyze logs: " + error);
+                }
+            });
+
+            $.ajax({
+                url: "/api/analyze-prompt",
+                type: "POST",
+                contentType: "application/json",
+                data: JSON.stringify({
+                    prompt: prompt,
+                    model: model,
+                    goal: goal
+                }),
+                success: function(analysis) {
+                    displayAnalysis(analysis);
+                },
+                error: function(xhr, status, error) {
+                    console.error("Error analyzing prompt:", error);
+                    logMessage("error", "Failed to analyze prompt: " + error);
+                }
+            });
+        }
+
+        function clearAnalysis() {
+            currentFragments = [];
+            $("#fragmentList").empty();
+            $("#overall").empty();
+            editor.operation(() => {
+                editor.getAllMarks().forEach(mark => mark.clear());
+                editor.clearGutter("suggestions");
+            });
+            logMessage("info", "Analysis cleared due to empty prompt");
+        }
+
+        function highlightFragments(fragments) {
+            editor.operation(() => {
+                editor.getAllMarks().forEach(mark => mark.clear());
+                fragments.forEach(fragment => {
+                    let start = editor.posFromIndex(editor.getValue().indexOf(fragment.text));
+                    let end = editor.posFromIndex(editor.getValue().indexOf(fragment.text) + fragment.text.length);
+                    editor.markText(start, end, {
+                        className: `cm-alignment-${fragment.goal_alignment}`
+                    });
+                });
+            });
+        }
+
+        function addFragmentTypeIcons(fragments) {
+            editor.operation(() => {
+                for (let i = 0; i < editor.lineCount(); i++) {
+                    editor.removeLineClass(i, "text");
+                }
+                fragments.forEach(fragment => {
+                    let line = editor.posFromIndex(editor.getValue().indexOf(fragment.text)).line;
+                    editor.addLineClass(line, "text", `cm-fragment-${fragment.type}`);
+                });
+            });
+        }
+
+        function addInlineSuggestions(fragments) {
+            editor.operation(() => {
+                editor.clearGutter("suggestions");
+                fragments.forEach((fragment, index) => {
+                    let line = editor.posFromIndex(editor.getValue().indexOf(fragment.text)).line;
+                    editor.setGutterMarker(line, "suggestions", makeMarker(fragment.improvement_suggestion));
+                });
+            });
+        }
+
+        function makeMarker(suggestion) {
+            let marker = document.createElement("div");
+            marker.innerHTML = "💡";
+            marker.title = suggestion;
+            marker.className = "text-yellow-500 cursor-pointer";
+            return marker;
+        }
+
+        function displayFragmentAnalysis(fragments) {
+            let html = fragments.map((fragment, index) => `
+                <div class="mb-4 p-2 border rounded" id="fragment-${index}">
+                    <h4 class="font-bold">Fragment ${index + 1}</h4>
+                    <p>${fragment.text}</p>
+                    <p>Type: ${fragment.type}</p>
+                    <p>Alignment: ${fragment.goal_alignment}/5</p>
+                    <p class="text-sm italic">Suggestion: ${fragment.improvement_suggestion}</p>
+                </div>
+            `).join('');
+            $("#fragmentList").html(html);
+        }
+
+        function displayLogs(logs) {
+            logs.forEach(function(log) {
+                logMessage(log.type, log.message);
+            });
+        }
+
+        function displayAnalysis(analysis) {
+            $("#goalAlignment").text(`Goal Alignment: ${analysis.overall_goal_alignment}/10`);
+            $("#effectiveness").text(`Estimated Effectiveness: ${analysis.estimated_effectiveness}/10`);
+            
+            let improvementsHtml = analysis.suggested_improvements.map(improvement => 
+                `<li>${improvement}</li>`
+            ).join('');
+            $("#improvements").html(improvementsHtml);
+
+            logMessage("info", "Prompt analyzed successfully");
+        }
+
+        function logMessage(type, message) {
+            let color = type === "error" ? "text-red-500" : (type === "warning" ? "text-yellow-500" : "text-green-500");
+            $("#console").append(`<div class="${color}">[${type.toUpperCase()}] ${message}</div>`);
+            $("#console").scrollTop($("#console")[0].scrollHeight);
+        }
+
+        $("#analyzeBtn").click(function() {
+            checkAndAnalyzePrompt();
+        });
+
+        $("#generateTestBtn").click(function() {
+            let prompt = editor.getValue();
+            let model = $("#modelSelect").val();
+            let goal = $("#goal").val();
+
+            $.ajax({
+                url: "/api/generate-test",
+                type: "POST",
+                contentType: "application/json",
+                data: JSON.stringify({
+                    prompt: prompt,
+                    model: model,
+                    goal: goal || undefined
+                }),
+                success: function(response) {
+                    displayTest(response);
+                    storedTests.push(response);
+                },
+                error: function(xhr, status, error) {
+                    console.error("Error generating test:", error);
+                    logMessage("error", "Failed to generate test: " + error);
+                }
+            });
+        });
+
+        $("#downloadTestsBtn").click(function() {
+            if (storedTests.length === 0) {
+                logMessage("warning", "No tests to download. Generate some tests first.");
+                return;
+            }
+            let dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(storedTests));
+            let downloadAnchorNode = document.createElement('a');
+            downloadAnchorNode.setAttribute("href", dataStr);
+            downloadAnchorNode.setAttribute("download", "prompt_tests.json");
+            document.body.appendChild(downloadAnchorNode);
+            downloadAnchorNode.click();
+            downloadAnchorNode.remove();
+        });
+
+        function displayTest(test) {
+            let inputHtml = Object.entries(test.input).map(([key, value]) => 
+                `<p><strong>${key}:</strong> ${value}</p>`
+            ).join('');
+            
+            $("#testResults").html(`
+                <h3 class="font-bold">Generated Test</h3>
+                <div class="mb-2">
+                    <h4 class="font-semibold">Input:</h4>
+                    ${inputHtml}
+                </div>
+                <p><strong>Expected Output:</strong> ${test.expected_output}</p>
+                <p><strong>Goal Relevance:</strong> ${test.goal_relevance}/5</p>
+            `);
+            logMessage("info", "Test case generated and stored");
+        }
+
+        // Tab switching functionality
+        $(".tab-button").click(function() {
+            $(".tab-button").removeClass("text-blue-500 border-b-2 border-blue-500").addClass("text-gray-500");
+            $(this).removeClass("text-gray-500").addClass("text-blue-500 border-b-2 border-blue-500");
+            $(".tab-content").addClass("hidden");
+            $("#" + $(this).data("tab")).removeClass("hidden");
+        });
+
+        // Resize handler for CodeMirror
+        function resizeCodeMirror() {
+            let height = window.innerHeight - 400; // Adjust this value as needed
+            $(".CodeMirror").css("height", height + "px");
+            editor.refresh();
+        }
+
+        // Call resizeCodeMirror on window resize
+        $(window).resize(resizeCodeMirror);
+
+        // Initialize
+        resizeCodeMirror();
+        checkAndAnalyzePrompt();
+
+        // Event delegation for fragment highlighting
+        $("#fragmentList").on("click", ".mb-4", function() {
+            let fragmentIndex = $(this).attr("id").split("-")[1];
+            let fragment = currentFragments[fragmentIndex];
+            let start = editor.posFromIndex(editor.getValue().indexOf(fragment.text));
+            let end = editor.posFromIndex(editor.getValue().indexOf(fragment.text) + fragment.text.length);
+            
+            editor.setSelection(start, end);
+            editor.scrollIntoView(start, 100);
+        });
+
+        // Gutter click handler for fragment highlighting in the panel
+        editor.on("gutterClick", function(cm, lineNumber) {
+            let fragmentIndex = currentFragments.findIndex(fragment => {
+                let start = editor.posFromIndex(editor.getValue().indexOf(fragment.text));
+                return start.line === lineNumber;
+            });
+            
+            if (fragmentIndex !== -1) {
+                $(".tab-button[data-tab='fragments']").click(); // Switch to fragments tab
+                let fragmentElement = $(`#fragment-${fragmentIndex}`);
+                fragmentElement.addClass("bg-yellow-100");
+                setTimeout(() => fragmentElement.removeClass("bg-yellow-100"), 2000);
+                fragmentElement[0].scrollIntoView({ behavior: "smooth", block: "center" });
+            }
+        });
+    });
+</script>
+{% endblock %}
