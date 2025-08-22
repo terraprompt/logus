@@ -1,5 +1,5 @@
 """
-Web interface for Logus using FastAPI.
+Web interface for Blogus using FastAPI.
 """
 
 import os
@@ -12,8 +12,9 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi import Request
 
-from logus.core import (
-    LLMModel,
+from blogus.core import (
+    TargetLLMModel,
+    JudgeLLMModel,
     Fragment,
     Log,
     Test,
@@ -43,9 +44,9 @@ if os.path.exists(templates_dir):
 # Request models
 class FragmentAnalysisRequest(BaseModel):
     prompt: str
-    model: LLMModel
+    target_model: TargetLLMModel
+    judge_model: JudgeLLMModel
     goal: Optional[str] = None
-
 
 class FragmentResponse(BaseModel):
     text: str
@@ -53,17 +54,15 @@ class FragmentResponse(BaseModel):
     goal_alignment: int
     improvement_suggestion: str
 
-
 class LogResponse(BaseModel):
     type: str
     message: str
 
-
 class PromptAnalysisRequest(BaseModel):
     prompt: str
-    model: LLMModel
+    target_model: TargetLLMModel
+    judge_model: JudgeLLMModel
     goal: Optional[str] = None
-
 
 class PromptAnalysisResponse(BaseModel):
     overall_goal_alignment: int
@@ -72,33 +71,30 @@ class PromptAnalysisResponse(BaseModel):
     inferred_goal: Optional[str] = None
     is_goal_inferred: bool
 
-
 class TestGenerationRequest(BaseModel):
     prompt: str
-    model: LLMModel
+    target_model: TargetLLMModel
+    judge_model: JudgeLLMModel
     goal: Optional[str] = None
-
 
 class TestResponse(BaseModel):
     input: Dict[str, str]
     expected_output: str
     goal_relevance: int
 
-
 class PromptExecutionRequest(BaseModel):
     prompt: str
-    model: LLMModel
-
+    target_model: TargetLLMModel
 
 class GoalInferenceRequest(BaseModel):
     prompt: str
-    model: LLMModel
+    judge_model: JudgeLLMModel
 
 
 @app.post("/api/infer-goal", response_model=str)
 async def infer_goal_endpoint(request: GoalInferenceRequest):
     try:
-        return infer_goal(request.prompt, request.model).strip()
+        return infer_goal(request.prompt, request.judge_model).strip()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -106,7 +102,7 @@ async def infer_goal_endpoint(request: GoalInferenceRequest):
 @app.post("/api/analyze-fragments", response_model=List[FragmentResponse])
 async def analyze_fragments_endpoint(request: FragmentAnalysisRequest):
     try:
-        fragments = analyze_fragments(request.prompt, request.model, request.goal)
+        fragments = analyze_fragments(request.prompt, request.judge_model, request.goal)
         return [
             FragmentResponse(
                 text=f.text,
@@ -123,7 +119,7 @@ async def analyze_fragments_endpoint(request: FragmentAnalysisRequest):
 @app.post("/api/analyze-logs", response_model=List[LogResponse])
 async def analyze_logs_endpoint(request: PromptAnalysisRequest):
     try:
-        logs = analyze_logs(request.prompt, request.model, request.goal)
+        logs = analyze_logs(request.prompt, request.judge_model, request.goal)
         return [LogResponse(type=l.type, message=l.message) for l in logs]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -132,7 +128,7 @@ async def analyze_logs_endpoint(request: PromptAnalysisRequest):
 @app.post("/api/analyze-prompt", response_model=PromptAnalysisResponse)
 async def analyze_prompt_endpoint(request: PromptAnalysisRequest):
     try:
-        analysis = analyze_prompt(request.prompt, request.model, request.goal)
+        analysis = analyze_prompt(request.prompt, request.judge_model, request.goal)
         return PromptAnalysisResponse(
             overall_goal_alignment=analysis.overall_goal_alignment,
             suggested_improvements=analysis.suggested_improvements,
@@ -147,7 +143,7 @@ async def analyze_prompt_endpoint(request: PromptAnalysisRequest):
 @app.post("/api/generate-test", response_model=TestResponse)
 async def generate_test_endpoint(request: TestGenerationRequest):
     try:
-        test_case = generate_test(request.prompt, request.model, request.goal)
+        test_case = generate_test(request.prompt, request.judge_model, request.goal)
         return TestResponse(
             input=test_case.input,
             expected_output=test_case.expected_output,
@@ -160,7 +156,7 @@ async def generate_test_endpoint(request: TestGenerationRequest):
 @app.post("/api/execute-prompt", response_model=str)
 async def execute_prompt_endpoint(request: PromptExecutionRequest):
     try:
-        return execute_prompt(request.prompt, request.model)
+        return execute_prompt(request.prompt, request.target_model)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

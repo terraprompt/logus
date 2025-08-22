@@ -1,10 +1,10 @@
 """
-Tests for the CLI interface of Logus.
+Tests for the CLI interface of Blogus.
 """
 
 import pytest
 from click.testing import CliRunner
-from logus.cli import cli
+from blogus.cli import cli
 
 
 @pytest.fixture
@@ -18,7 +18,7 @@ def test_cli_help(runner):
     result = runner.invoke(cli, ["--help"])
     assert result.exit_code == 0
     assert (
-        "Logus: A tool for crafting, analyzing, and perfecting AI prompts."
+        "Blogus: A tool for crafting, analyzing, and perfecting AI prompts."
         in result.output
     )
 

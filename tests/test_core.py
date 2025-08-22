@@ -1,11 +1,12 @@
 """
-Tests for the core functionality of Logus.
+Tests for the core functionality of Blogus.
 """
 
 import pytest
 from unittest.mock import patch, MagicMock
-from logus.core import (
-    LLMModel,
+from blogus.core import (
+    TargetLLMModel,
+    JudgeLLMModel,
     Fragment,
     Log,
     Test,
@@ -30,12 +31,20 @@ def mock_llm_response():
     return "This is a mock LLM response"
 
 
-def test_llm_model_enum():
-    """Test that LLMModel enum has the correct values."""
-    assert LLMModel.CLAUDE_3_OPUS == "claude-3-opus-20240229"
-    assert LLMModel.GPT_4 == "gpt-4o"
-    assert LLMModel.GPT_3_5_TURBO == "gpt-3.5-turbo"
-    assert LLMModel.GROQ_LLM == "mixtral-8x7b-32768"
+def test_target_llm_model_enum():
+    """Test that TargetLLMModel enum has the correct values."""
+    assert TargetLLMModel.CLAUDE_3_OPUS == "claude-3-opus-20240229"
+    assert TargetLLMModel.GPT_4 == "gpt-4o"
+    assert TargetLLMModel.GPT_3_5_TURBO == "gpt-3.5-turbo"
+    assert TargetLLMModel.GROQ_MIXTRAL_8X7B == "groq/mixtral-8x7b-32768"
+
+
+def test_judge_llm_model_enum():
+    """Test that JudgeLLMModel enum has the correct values."""
+    assert JudgeLLMModel.CLAUDE_3_OPUS == "claude-3-opus-20240229"
+    assert JudgeLLMModel.GPT_4 == "gpt-4o"
+    assert JudgeLLMModel.GPT_3_5_TURBO == "gpt-3.5-turbo"
+    assert JudgeLLMModel.GROQ_MIXTRAL_8X7B == "groq/mixtral-8x7b-32768"
 
 
 def test_fragment_creation():
@@ -90,41 +99,17 @@ def test_prompt_analysis_creation():
     assert analysis.is_goal_inferred == True
 
 
-@patch("logus.core.anthropic_client")
-def test_get_llm_response_claude(mock_anthropic_client):
+@patch("logus.core.completion")
+def test_get_llm_response(mock_completion):
     """Test get_llm_response with Claude model."""
-    mock_response = MagicMock()
-    mock_response.completion = "Claude response"
-    mock_anthropic_client.completions.create.return_value = mock_response
-
-    result = get_llm_response(LLMModel.CLAUDE_3_OPUS, "Test prompt")
-    assert result == "Claude response"
-
-
-@patch("logus.core.openai")
-def test_get_llm_response_gpt(mock_openai):
-    """Test get_llm_response with GPT model."""
     mock_choice = MagicMock()
-    mock_choice.message.content = "GPT response"
+    mock_choice.message.content = "Test response"
     mock_response = MagicMock()
     mock_response.choices = [mock_choice]
-    mock_openai.chat.completions.create.return_value = mock_response
+    mock_completion.return_value = mock_response
 
-    result = get_llm_response(LLMModel.GPT_4, "Test prompt")
-    assert result == "GPT response"
-
-
-@patch("logus.core.groq_client")
-def test_get_llm_response_groq(mock_groq_client):
-    """Test get_llm_response with Groq model."""
-    mock_choice = MagicMock()
-    mock_choice.message.content = "Groq response"
-    mock_response = MagicMock()
-    mock_response.choices = [mock_choice]
-    mock_groq_client.chat.completions.create.return_value = mock_response
-
-    result = get_llm_response(LLMModel.GROQ_LLM, "Test prompt")
-    assert result == "Groq response"
+    result = get_llm_response("claude-3-opus-20240229", "Test prompt")
+    assert result == "Test response"
 
 
 @patch("logus.core.get_llm_response")
@@ -132,7 +117,7 @@ def test_infer_goal(mock_get_llm_response):
     """Test infer_goal function."""
     mock_get_llm_response.return_value = '{"goal": "Help users find information"}'
 
-    result = infer_goal(SAMPLE_PROMPT, LLMModel.GPT_4)
+    result = infer_goal(SAMPLE_PROMPT, "gpt-4o")
     assert result == "Help users find information"
 
 
@@ -141,7 +126,7 @@ def test_analyze_fragments(mock_get_llm_response):
     """Test analyze_fragments function."""
     mock_get_llm_response.return_value = '{"fragments": [{"text": "Sample text", "type": "instruction", "goal_alignment": 5, "improvement_suggestion": "Improve clarity"}]}'
 
-    fragments = analyze_fragments(SAMPLE_PROMPT, LLMModel.GPT_4, SAMPLE_GOAL)
+    fragments = analyze_fragments(SAMPLE_PROMPT, "gpt-4o", SAMPLE_GOAL)
     assert len(fragments) == 1
     assert isinstance(fragments[0], Fragment)
 
@@ -153,7 +138,7 @@ def test_analyze_logs(mock_get_llm_response):
         '{"logs": [{"type": "info", "message": "Test log message"}]}'
     )
 
-    logs = analyze_logs(SAMPLE_PROMPT, LLMModel.GPT_4, SAMPLE_GOAL)
+    logs = analyze_logs(SAMPLE_PROMPT, "gpt-4o", SAMPLE_GOAL)
     assert len(logs) == 1
     assert isinstance(logs[0], Log)
 
@@ -163,7 +148,7 @@ def test_analyze_prompt(mock_get_llm_response):
     """Test analyze_prompt function."""
     mock_get_llm_response.return_value = '{"overall_goal_alignment": 8, "suggested_improvements": ["Add more context"], "estimated_effectiveness": 7, "inferred_goal": "", "is_goal_inferred": false}'
 
-    analysis = analyze_prompt(SAMPLE_PROMPT, LLMModel.GPT_4, SAMPLE_GOAL)
+    analysis = analyze_prompt(SAMPLE_PROMPT, "gpt-4o", SAMPLE_GOAL)
     assert isinstance(analysis, PromptAnalysis)
     assert analysis.overall_goal_alignment == 8
 
@@ -173,7 +158,7 @@ def test_generate_test(mock_get_llm_response):
     """Test generate_test function."""
     mock_get_llm_response.return_value = '{"input": {"question": "What is AI?"}, "expected_output": "AI is artificial intelligence", "goal_relevance": 5}'
 
-    test_case = generate_test(SAMPLE_PROMPT, LLMModel.GPT_4, SAMPLE_GOAL)
+    test_case = generate_test(SAMPLE_PROMPT, "gpt-4o", SAMPLE_GOAL)
     assert isinstance(test_case, Test)
     assert test_case.input == {"question": "What is AI?"}
 
@@ -183,5 +168,5 @@ def test_execute_prompt(mock_get_llm_response):
     """Test execute_prompt function."""
     mock_get_llm_response.return_value = "This is a test response"
 
-    result = execute_prompt(SAMPLE_PROMPT, LLMModel.GPT_4)
+    result = execute_prompt(SAMPLE_PROMPT, "gpt-4o")
     assert result == "This is a test response"

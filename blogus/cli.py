@@ -1,10 +1,11 @@
 """
-Command-line interface for Logus.
+Command-line interface for Blogus.
 """
 
 import click
-from logus.core import (
-    LLMModel,
+from blogus.core import (
+    TargetLLMModel,
+    JudgeLLMModel,
     analyze_prompt,
     analyze_fragments,
     analyze_logs,
@@ -16,17 +17,23 @@ from logus.core import (
 
 @click.group()
 def cli():
-    """Logus: A tool for crafting, analyzing, and perfecting AI prompts."""
+    """Blogus: A tool for crafting, analyzing, and perfecting AI prompts."""
     pass
 
 
 @cli.command()
 @click.argument("prompt", type=str)
 @click.option(
-    "--model",
-    type=click.Choice([m.value for m in LLMModel]),
-    default=LLMModel.GPT_4,
-    help="LLM model to use",
+    "--target-model",
+    type=click.Choice([m.value for m in TargetLLMModel]),
+    default=TargetLLMModel.GPT_4,
+    help="Target LLM model to use for prompt execution",
+)
+@click.option(
+    "--judge-model",
+    type=click.Choice([m.value for m in JudgeLLMModel]),
+    default=JudgeLLMModel.GPT_4,
+    help="Judge LLM model to use for analysis",
 )
 @click.option(
     "--goal",
@@ -34,14 +41,12 @@ def cli():
     default=None,
     help="Goal for the prompt (will be inferred if not provided)",
 )
-def analyze(prompt, model, goal):
+def analyze(prompt, target_model, judge_model, goal):
     """Analyze a prompt for effectiveness and alignment with a goal."""
-    model = LLMModel(model)
-
-    click.echo(f"Analyzing prompt with {model.value}...")
+    click.echo(f"Analyzing prompt with judge model {judge_model}...")
 
     # Perform analysis
-    analysis = analyze_prompt(prompt, model, goal)
+    analysis = analyze_prompt(prompt, judge_model, goal)
 
     click.echo("\nPrompt Analysis Results:")
     click.echo("=" * 50)
@@ -59,10 +64,16 @@ def analyze(prompt, model, goal):
 @cli.command()
 @click.argument("prompt", type=str)
 @click.option(
-    "--model",
-    type=click.Choice([m.value for m in LLMModel]),
-    default=LLMModel.GPT_4,
-    help="LLM model to use",
+    "--target-model",
+    type=click.Choice([m.value for m in TargetLLMModel]),
+    default=TargetLLMModel.GPT_4,
+    help="Target LLM model to use for prompt execution",
+)
+@click.option(
+    "--judge-model",
+    type=click.Choice([m.value for m in JudgeLLMModel]),
+    default=JudgeLLMModel.GPT_4,
+    help="Judge LLM model to use for analysis",
 )
 @click.option(
     "--goal",
@@ -70,14 +81,12 @@ def analyze(prompt, model, goal):
     default=None,
     help="Goal for the prompt (will be inferred if not provided)",
 )
-def fragments(prompt, model, goal):
+def fragments(prompt, target_model, judge_model, goal):
     """Analyze prompt fragments for goal alignment."""
-    model = LLMModel(model)
-
-    click.echo(f"Analyzing prompt fragments with {model.value}...")
+    click.echo(f"Analyzing prompt fragments with judge model {judge_model}...")
 
     # Analyze fragments
-    fragments = analyze_fragments(prompt, model, goal)
+    fragments = analyze_fragments(prompt, judge_model, goal)
 
     click.echo("\nFragment Analysis Results:")
     click.echo("=" * 50)
@@ -92,10 +101,16 @@ def fragments(prompt, model, goal):
 @cli.command()
 @click.argument("prompt", type=str)
 @click.option(
-    "--model",
-    type=click.Choice([m.value for m in LLMModel]),
-    default=LLMModel.GPT_4,
-    help="LLM model to use",
+    "--target-model",
+    type=click.Choice([m.value for m in TargetLLMModel]),
+    default=TargetLLMModel.GPT_4,
+    help="Target LLM model to use for prompt execution",
+)
+@click.option(
+    "--judge-model",
+    type=click.Choice([m.value for m in JudgeLLMModel]),
+    default=JudgeLLMModel.GPT_4,
+    help="Judge LLM model to use for analysis",
 )
 @click.option(
     "--goal",
@@ -103,14 +118,12 @@ def fragments(prompt, model, goal):
     default=None,
     help="Goal for the prompt (will be inferred if not provided)",
 )
-def logs(prompt, model, goal):
+def logs(prompt, target_model, judge_model, goal):
     """Generate logs for a prompt."""
-    model = LLMModel(model)
-
-    click.echo(f"Generating logs with {model.value}...")
+    click.echo(f"Generating logs with judge model {judge_model}...")
 
     # Generate logs
-    logs = analyze_logs(prompt, model, goal)
+    logs = analyze_logs(prompt, judge_model, goal)
 
     click.echo("\nPrompt Logs:")
     click.echo("=" * 50)
@@ -121,10 +134,16 @@ def logs(prompt, model, goal):
 @cli.command()
 @click.argument("prompt", type=str)
 @click.option(
-    "--model",
-    type=click.Choice([m.value for m in LLMModel]),
-    default=LLMModel.GPT_4,
-    help="LLM model to use",
+    "--target-model",
+    type=click.Choice([m.value for m in TargetLLMModel]),
+    default=TargetLLMModel.GPT_4,
+    help="Target LLM model to use for prompt execution",
+)
+@click.option(
+    "--judge-model",
+    type=click.Choice([m.value for m in JudgeLLMModel]),
+    default=JudgeLLMModel.GPT_4,
+    help="Judge LLM model to use for analysis",
 )
 @click.option(
     "--goal",
@@ -132,14 +151,12 @@ def logs(prompt, model, goal):
     default=None,
     help="Goal for the prompt (will be inferred if not provided)",
 )
-def test(prompt, model, goal):
+def test(prompt, target_model, judge_model, goal):
     """Generate a test case for a prompt."""
-    model = LLMModel(model)
-
-    click.echo(f"Generating test case with {model.value}...")
+    click.echo(f"Generating test case with judge model {judge_model}...")
 
     # Generate test
-    test_case = generate_test(prompt, model, goal)
+    test_case = generate_test(prompt, judge_model, goal)
 
     click.echo("\nGenerated Test Case:")
     click.echo("=" * 50)
@@ -153,19 +170,17 @@ def test(prompt, model, goal):
 @cli.command()
 @click.argument("prompt", type=str)
 @click.option(
-    "--model",
-    type=click.Choice([m.value for m in LLMModel]),
-    default=LLMModel.GPT_4,
-    help="LLM model to use",
+    "--target-model",
+    type=click.Choice([m.value for m in TargetLLMModel]),
+    default=TargetLLMModel.GPT_4,
+    help="Target LLM model to use for prompt execution",
 )
-def execute(prompt, model):
-    """Execute a prompt with the specified LLM."""
-    model = LLMModel(model)
-
-    click.echo(f"Executing prompt with {model.value}...")
+def execute(prompt, target_model):
+    """Execute a prompt with the specified target LLM."""
+    click.echo(f"Executing prompt with target model {target_model}...")
 
     # Execute prompt
-    result = execute_prompt(prompt, model)
+    result = execute_prompt(prompt, target_model)
 
     click.echo("\nExecution Result:")
     click.echo("=" * 50)
@@ -175,19 +190,17 @@ def execute(prompt, model):
 @cli.command()
 @click.argument("prompt", type=str)
 @click.option(
-    "--model",
-    type=click.Choice([m.value for m in LLMModel]),
-    default=LLMModel.GPT_4,
-    help="LLM model to use",
+    "--judge-model",
+    type=click.Choice([m.value for m in JudgeLLMModel]),
+    default=JudgeLLMModel.GPT_4,
+    help="Judge LLM model to use for analysis",
 )
-def goal(prompt, model):
+def goal(prompt, judge_model):
     """Infer the goal of a prompt."""
-    model = LLMModel(model)
-
-    click.echo(f"Inferring goal with {model.value}...")
+    click.echo(f"Inferring goal with judge model {judge_model}...")
 
     # Infer goal
-    inferred_goal = infer_goal(prompt, model)
+    inferred_goal = infer_goal(prompt, judge_model)
 
     click.echo("\nInferred Goal:")
     click.echo("=" * 50)

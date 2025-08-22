@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 def test_web_imports():
     """Test that all web modules can be imported."""
     try:
-        from logus.web import app
+        from blogus.web import app
         print("✓ Web app imported successfully")
         
         # Test that all routes are defined
@@ -37,7 +37,7 @@ def test_web_imports():
 def test_web_cli_import():
     """Test that the web CLI can be imported."""
     try:
-        from logus.web_cli import main
+        from blogus.web_cli import main
         print("✓ Web CLI imported successfully")
         return True
     except ImportError as e:

@@ -1,5 +1,5 @@
 """
-Tests for the web interface of Logus.
+Tests for the web interface of Blogus.
 """
 
 import pytest
@@ -8,7 +8,7 @@ import pytest
 def test_web_import():
     """Test that the web module can be imported without errors."""
     try:
-        from logus import web
+        from blogus import web
 
         assert web is not None
     except ImportError as e:

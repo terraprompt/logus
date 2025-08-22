@@ -1,8 +1,8 @@
 """
-Backward compatibility entry point for Logus.
+Backward compatibility entry point for Blogus.
 """
 
-from logus.web import app
+from blogus.web import app
 
 if __name__ == "__main__":
     import uvicorn

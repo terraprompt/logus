@@ -6,7 +6,7 @@ import pytest
 def test_web_cli_import():
     """Test that the web CLI module can be imported."""
     try:
-        from logus import web_cli
+        from blogus import web_cli
         assert web_cli is not None
     except ImportError as e:
         # This is expected if web dependencies are not installed

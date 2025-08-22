@@ -1,24 +1,16 @@
 """
-Backward compatibility module for Logus.
+Backward compatibility module for Blogus.
 """
 
-# For backward compatibility, import the main FastAPI app
-from logus.web import app
+from blogus.web import app
 
-# Also import core functionality
-from logus.core import (
-    LLMModel,
-    Fragment,
-    Log,
-    Test,
-    PromptAnalysis,
-    get_llm_response,
-    infer_goal,
-    analyze_fragments,
-    analyze_logs,
+from blogus.core import (
+    TargetLLMModel,
+    JudgeLLMModel,
     analyze_prompt,
     generate_test,
     execute_prompt,
+    infer_goal,
 )
 
 __all__ = [

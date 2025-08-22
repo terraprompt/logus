@@ -1,8 +1,8 @@
 """
-Example usage of the Logus library.
+Example usage of the Blogus library.
 """
 
-from logus.core import LLMModel, analyze_prompt, generate_test
+from blogus.core import LLMModel, analyze_prompt, generate_test
 
 # Example prompt
 prompt = """

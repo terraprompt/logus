@@ -1,5 +1,5 @@
 """
-Logus: A library for crafting, analyzing, and perfecting AI prompts.
+Blogus: A library for crafting, analyzing, and perfecting AI prompts.
 
 This package provides tools for:
 - Prompt analysis and optimization
